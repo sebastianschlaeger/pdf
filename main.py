@@ -26,15 +26,26 @@ def edit_pdf(input_pdf, text_replacements):
                 content = page['/Contents']
                 if isinstance(content, ArrayObject):
                     for j, obj in enumerate(content):
-                        if isinstance(obj, (DecodedStreamObject, EncodedStreamObject)):
+                        if isinstance(obj, EncodedStreamObject):
+                            obj = DecodedStreamObject().decode(obj)
+                        if isinstance(obj, DecodedStreamObject):
                             data = obj.get_data()
                             for search_text, replacement_text in text_replacements:
+                                logger.debug(f"Replacing '{search_text}' with '{replacement_text}'")
                                 data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
                             obj.set_data(data)
                             content[j] = obj
-                elif isinstance(content, (DecodedStreamObject, EncodedStreamObject)):
+                elif isinstance(content, EncodedStreamObject):
+                    content = DecodedStreamObject().decode(content)
                     data = content.get_data()
                     for search_text, replacement_text in text_replacements:
+                        logger.debug(f"Replacing '{search_text}' with '{replacement_text}'")
+                        data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
+                    content.set_data(data)
+                elif isinstance(content, DecodedStreamObject):
+                    data = content.get_data()
+                    for search_text, replacement_text in text_replacements:
+                        logger.debug(f"Replacing '{search_text}' with '{replacement_text}'")
                         data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
                     content.set_data(data)
                 page[NameObject('/Contents')] = content
