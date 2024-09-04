@@ -32,10 +32,12 @@ def replace_image_on_page(page, new_image):
                 # Ersetzen Sie das alte Bild durch das neue
                 if isinstance(xObject[obj], EncodedStreamObject):
                     logger.debug("Image object is EncodedStreamObject")
-                    xObject[obj] = DecodedStreamObject().setData(img_byte_arr)
+                    new_obj = DecodedStreamObject()
+                    new_obj.set_data(img_byte_arr)
+                    xObject[obj] = new_obj
                 elif isinstance(xObject[obj], DecodedStreamObject):
                     logger.debug("Image object is DecodedStreamObject")
-                    xObject[obj].setData(img_byte_arr)
+                    xObject[obj].set_data(img_byte_arr)
                 else:
                     logger.warning(f"Unexpected object type: {type(xObject[obj])}")
                     continue
