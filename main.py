@@ -5,6 +5,10 @@ from PyPDF2.generic import DecodedStreamObject, EncodedStreamObject
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from PIL import Image
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def replace_text(content, search_text, replacement_text):
     lines = content.splitlines()
@@ -14,17 +18,28 @@ def replace_text(content, search_text, replacement_text):
     return "\n".join(lines)
 
 def replace_image_on_page(page, new_image):
+    logger.debug("Attempting to replace image on page")
     if '/Resources' in page and '/XObject' in page['/Resources']:
         xObject = page['/Resources']['/XObject']
         for obj in xObject:
             if xObject[obj]['/Subtype'] == '/Image':
+                logger.debug(f"Found image object: {obj}")
                 # Lesen Sie das neue Bild
                 img_byte_arr = io.BytesIO()
                 new_image.save(img_byte_arr, format='PNG')
                 img_byte_arr = img_byte_arr.getvalue()
 
                 # Ersetzen Sie das alte Bild durch das neue
-                xObject[obj].write(img_byte_arr)
+                if isinstance(xObject[obj], EncodedStreamObject):
+                    logger.debug("Image object is EncodedStreamObject")
+                    xObject[obj] = DecodedStreamObject().setData(img_byte_arr)
+                elif isinstance(xObject[obj], DecodedStreamObject):
+                    logger.debug("Image object is DecodedStreamObject")
+                    xObject[obj].setData(img_byte_arr)
+                else:
+                    logger.warning(f"Unexpected object type: {type(xObject[obj])}")
+                    continue
+
                 xObject[obj].update({
                     '/Filter': '/FlateDecode',
                     '/Width': new_image.width,
@@ -33,14 +48,18 @@ def replace_image_on_page(page, new_image):
                     '/BitsPerComponent': 8,
                     '/Length': len(img_byte_arr)
                 })
+                logger.debug("Image replacement successful")
                 return
+    logger.warning("No suitable image found for replacement")
 
 def edit_pdf(input_pdf, text_replacements, new_image):
     try:
+        logger.debug("Starting PDF editing process")
         reader = PdfReader(input_pdf)
         writer = PdfWriter()
 
-        for page in reader.pages:
+        for i, page in enumerate(reader.pages):
+            logger.debug(f"Processing page {i+1}")
             if '/Contents' in page:
                 content = page['/Contents']
                 if isinstance(content, list):
@@ -60,11 +79,13 @@ def edit_pdf(input_pdf, text_replacements, new_image):
                 replace_image_on_page(page, new_image)
             writer.add_page(page)
 
+        logger.debug("PDF editing complete, preparing output")
         output_pdf = io.BytesIO()
         writer.write(output_pdf)
         output_pdf.seek(0)
         return output_pdf
     except Exception as e:
+        logger.exception(f"Error occurred while editing PDF: {str(e)}")
         st.error(f"Fehler beim Bearbeiten der PDF: {str(e)}")
         return None
 
