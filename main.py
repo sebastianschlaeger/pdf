@@ -14,37 +14,61 @@ def replace_text(content, search_text, replacement_text):
     return "\n".join(lines)
 
 def replace_image_on_page(page, new_image):
-    for img_index, img in enumerate(page.images):
-        # Lesen Sie das neue Bild
-        img_byte_arr = io.BytesIO()
-        new_image.save(img_byte_arr, format='PNG')
-        img_byte_arr = img_byte_arr.getvalue()
+    if '/Resources' in page and '/XObject' in page['/Resources']:
+        xObject = page['/Resources']['/XObject'].getObject()
+        for obj in xObject:
+            if xObject[obj]['/Subtype'] == '/Image':
+                # Lesen Sie das neue Bild
+                img_byte_arr = io.BytesIO()
+                new_image.save(img_byte_arr, format='PNG')
+                img_byte_arr = img_byte_arr.getvalue()
 
-        # Ersetzen Sie das alte Bild durch das neue
-        img.data = img_byte_arr
-        img.filter = "/FlateDecode"
+                # Ersetzen Sie das alte Bild durch das neue
+                xObject[obj]._data = img_byte_arr
+                xObject[obj].update({
+                    '/Filter': '/FlateDecode',
+                    '/Width': new_image.width,
+                    '/Height': new_image.height,
+                    '/ColorSpace': '/DeviceRGB',
+                    '/BitsPerComponent': 8,
+                    '/Length': len(img_byte_arr)
+                })
+                return
 
 def edit_pdf(input_pdf, text_replacements, new_image):
-    reader = PdfReader(input_pdf)
-    writer = PdfWriter()
+    try:
+        reader = PdfReader(input_pdf)
+        writer = PdfWriter()
 
-    for page in reader.pages:
-        for obj in page.get("/Contents", ()):
-            if isinstance(obj, DecodedStreamObject) or isinstance(obj, EncodedStreamObject):
-                data = obj.get_data()
-                for search_text, replacement_text in text_replacements:
-                    data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
-                obj.set_data(data)
-        
-        if new_image:
-            replace_image_on_page(page, new_image)
-        writer.add_page(page)
+        for page in reader.pages:
+            if '/Contents' in page:
+                content = page['/Contents']
+                if isinstance(content, list):
+                    for obj in content:
+                        if isinstance(obj, (DecodedStreamObject, EncodedStreamObject)):
+                            data = obj.get_data()
+                            for search_text, replacement_text in text_replacements:
+                                data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
+                            obj.set_data(data)
+                elif isinstance(content, (DecodedStreamObject, EncodedStreamObject)):
+                    data = content.get_data()
+                    for search_text, replacement_text in text_replacements:
+                        data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
+                    content.set_data(data)
+            
+            if new_image:
+                replace_image_on_page(page, new_image)
+            writer.add_page(page)
 
-    output_pdf = io.BytesIO()
-    writer.write(output_pdf)
-    output_pdf.seek(0)
-    return output_pdf
+        output_pdf = io.BytesIO()
+        writer.write(output_pdf)
+        output_pdf.seek(0)
+        return output_pdf
+    except Exception as e:
+        st.error(f"Fehler beim Bearbeiten der PDF: {str(e)}")
+        return None
 
+# Der Rest des Streamlit-Codes bleibt unverändert
 st.title('PDF Editor App')
 
 uploaded_file = st.file_uploader("Wählen Sie eine PDF-Datei aus", type="pdf")
@@ -74,12 +98,15 @@ if uploaded_file is not None:
             new_image_pil = Image.open(new_image) if new_image else None
             edited_pdf = edit_pdf(uploaded_file, text_replacements, new_image_pil)
             
-            st.download_button(
-                label="Bearbeitete PDF herunterladen",
-                data=edited_pdf,
-                file_name="edited_document.pdf",
-                mime="application/pdf"
-            )
+            if edited_pdf:
+                st.download_button(
+                    label="Bearbeitete PDF herunterladen",
+                    data=edited_pdf,
+                    file_name="edited_document.pdf",
+                    mime="application/pdf"
+                )
+            else:
+                st.error("Die PDF konnte nicht bearbeitet werden. Bitte überprüfen Sie die Datei und versuchen Sie es erneut.")
         else:
             st.warning("Bitte geben Sie mindestens eine Text-Ersetzung ein oder wählen Sie ein neues Bild aus.")
 
