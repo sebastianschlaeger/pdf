@@ -1,10 +1,7 @@
 import streamlit as st
 import io
 from PyPDF2 import PdfReader, PdfWriter
-from PyPDF2.generic import DecodedStreamObject, EncodedStreamObject, NameObject, DictionaryObject, ArrayObject
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-from PIL import Image
+from PyPDF2.generic import DecodedStreamObject, EncodedStreamObject, NameObject, ArrayObject
 import logging
 
 logging.basicConfig(level=logging.DEBUG)
@@ -17,36 +14,7 @@ def replace_text(content, search_text, replacement_text):
             lines[i] = line.replace(search_text, replacement_text)
     return "\n".join(lines)
 
-def replace_image_on_page(page, new_image):
-    logger.debug("Attempting to replace image on page")
-    if '/Resources' in page and '/XObject' in page['/Resources']:
-        xObject = page['/Resources']['/XObject']
-        for obj in xObject:
-            if xObject[obj]['/Subtype'] == '/Image':
-                logger.debug(f"Found image object: {obj}")
-                # Lesen Sie das neue Bild
-                img_byte_arr = io.BytesIO()
-                new_image.save(img_byte_arr, format='PNG')
-                img_byte_arr = img_byte_arr.getvalue()
-
-                # Ersetzen Sie das alte Bild durch das neue
-                new_obj = DecodedStreamObject()
-                new_obj.setData(img_byte_arr)
-                new_obj.update({
-                    NameObject("/Type"): NameObject("/XObject"),
-                    NameObject("/Subtype"): NameObject("/Image"),
-                    NameObject("/Width"): new_image.width,
-                    NameObject("/Height"): new_image.height,
-                    NameObject("/ColorSpace"): NameObject("/DeviceRGB"),
-                    NameObject("/BitsPerComponent"): 8,
-                    NameObject("/Filter"): NameObject("/FlateDecode")
-                })
-                xObject[obj] = new_obj
-                logger.debug("Image replacement successful")
-                return
-    logger.warning("No suitable image found for replacement")
-
-def edit_pdf(input_pdf, text_replacements, new_image):
+def edit_pdf(input_pdf, text_replacements):
     try:
         logger.debug("Starting PDF editing process")
         reader = PdfReader(input_pdf)
@@ -70,9 +38,6 @@ def edit_pdf(input_pdf, text_replacements, new_image):
                         data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
                     content.set_data(data)
                 page[NameObject('/Contents')] = content
-            
-            if new_image:
-                replace_image_on_page(page, new_image)
 
             writer.add_page(page)
 
@@ -86,8 +51,7 @@ def edit_pdf(input_pdf, text_replacements, new_image):
         st.error(f"Fehler beim Bearbeiten der PDF: {str(e)}")
         return None
 
-# Der Rest des Streamlit-Codes bleibt unverändert
-st.title('PDF Editor App')
+st.title('PDF Text Editor App')
 
 uploaded_file = st.file_uploader("Wählen Sie eine PDF-Datei aus", type="pdf")
 
@@ -106,15 +70,10 @@ if uploaded_file is not None:
             replacement_text = st.text_input(f"Neuer Text {i+1}")
         if search_text and replacement_text:
             text_replacements.append((search_text, replacement_text))
-
-    # Bild-Ersetzung
-    st.subheader("Bild-Ersetzung")
-    new_image = st.file_uploader("Wählen Sie ein neues Bild aus (optional)", type=["png", "jpg", "jpeg"])
     
     if st.button("PDF bearbeiten"):
-        if text_replacements or new_image:
-            new_image_pil = Image.open(new_image) if new_image else None
-            edited_pdf = edit_pdf(uploaded_file, text_replacements, new_image_pil)
+        if text_replacements:
+            edited_pdf = edit_pdf(uploaded_file, text_replacements)
             
             if edited_pdf:
                 st.download_button(
@@ -126,6 +85,6 @@ if uploaded_file is not None:
             else:
                 st.error("Die PDF konnte nicht bearbeitet werden. Bitte überprüfen Sie die Datei und versuchen Sie es erneut.")
         else:
-            st.warning("Bitte geben Sie mindestens eine Text-Ersetzung ein oder wählen Sie ein neues Bild aus.")
+            st.warning("Bitte geben Sie mindestens eine Text-Ersetzung ein.")
 
 st.info("Hinweis: Diese App funktioniert am besten mit einfachen PDFs. Komplexe Layouts oder verschlüsselte PDFs können Probleme verursachen.")
