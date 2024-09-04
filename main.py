@@ -1,7 +1,7 @@
 import streamlit as st
 import io
 from PyPDF2 import PdfReader, PdfWriter
-from PyPDF2.generic import DecodedStreamObject, EncodedStreamObject
+from PyPDF2.generic import DecodedStreamObject, EncodedStreamObject, NameObject, DictionaryObject, ArrayObject
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from PIL import Image
@@ -30,26 +30,18 @@ def replace_image_on_page(page, new_image):
                 img_byte_arr = img_byte_arr.getvalue()
 
                 # Ersetzen Sie das alte Bild durch das neue
-                if isinstance(xObject[obj], EncodedStreamObject):
-                    logger.debug("Image object is EncodedStreamObject")
-                    new_obj = DecodedStreamObject()
-                    new_obj.set_data(img_byte_arr)
-                    xObject[obj] = new_obj
-                elif isinstance(xObject[obj], DecodedStreamObject):
-                    logger.debug("Image object is DecodedStreamObject")
-                    xObject[obj].set_data(img_byte_arr)
-                else:
-                    logger.warning(f"Unexpected object type: {type(xObject[obj])}")
-                    continue
-
-                xObject[obj].update({
-                    '/Filter': '/FlateDecode',
-                    '/Width': new_image.width,
-                    '/Height': new_image.height,
-                    '/ColorSpace': '/DeviceRGB',
-                    '/BitsPerComponent': 8,
-                    '/Length': len(img_byte_arr)
+                new_obj = DecodedStreamObject()
+                new_obj.setData(img_byte_arr)
+                new_obj.update({
+                    NameObject("/Type"): NameObject("/XObject"),
+                    NameObject("/Subtype"): NameObject("/Image"),
+                    NameObject("/Width"): new_image.width,
+                    NameObject("/Height"): new_image.height,
+                    NameObject("/ColorSpace"): NameObject("/DeviceRGB"),
+                    NameObject("/BitsPerComponent"): 8,
+                    NameObject("/Filter"): NameObject("/FlateDecode")
                 })
+                xObject[obj] = new_obj
                 logger.debug("Image replacement successful")
                 return
     logger.warning("No suitable image found for replacement")
@@ -64,21 +56,24 @@ def edit_pdf(input_pdf, text_replacements, new_image):
             logger.debug(f"Processing page {i+1}")
             if '/Contents' in page:
                 content = page['/Contents']
-                if isinstance(content, list):
-                    for obj in content:
+                if isinstance(content, ArrayObject):
+                    for j, obj in enumerate(content):
                         if isinstance(obj, (DecodedStreamObject, EncodedStreamObject)):
                             data = obj.get_data()
                             for search_text, replacement_text in text_replacements:
                                 data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
                             obj.set_data(data)
+                            content[j] = obj
                 elif isinstance(content, (DecodedStreamObject, EncodedStreamObject)):
                     data = content.get_data()
                     for search_text, replacement_text in text_replacements:
                         data = replace_text(data.decode('utf-8'), search_text, replacement_text).encode('utf-8')
                     content.set_data(data)
+                page[NameObject('/Contents')] = content
             
             if new_image:
                 replace_image_on_page(page, new_image)
+
             writer.add_page(page)
 
         logger.debug("PDF editing complete, preparing output")
