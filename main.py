@@ -27,7 +27,7 @@ def edit_pdf(input_pdf, text_replacements):
                 if isinstance(content, ArrayObject):
                     for j, obj in enumerate(content):
                         if isinstance(obj, EncodedStreamObject):
-                            obj = DecodedStreamObject().decode(obj)
+                            obj = obj.get_object()
                         if isinstance(obj, DecodedStreamObject):
                             data = obj.get_data()
                             for search_text, replacement_text in text_replacements:
@@ -36,7 +36,7 @@ def edit_pdf(input_pdf, text_replacements):
                             obj.set_data(data)
                             content[j] = obj
                 elif isinstance(content, EncodedStreamObject):
-                    content = DecodedStreamObject().decode(content)
+                    content = content.get_object()
                     data = content.get_data()
                     for search_text, replacement_text in text_replacements:
                         logger.debug(f"Replacing '{search_text}' with '{replacement_text}'")
