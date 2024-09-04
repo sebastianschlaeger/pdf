@@ -15,7 +15,7 @@ def replace_text(content, search_text, replacement_text):
 
 def replace_image_on_page(page, new_image):
     if '/Resources' in page and '/XObject' in page['/Resources']:
-        xObject = page['/Resources']['/XObject'].getObject()
+        xObject = page['/Resources']['/XObject']
         for obj in xObject:
             if xObject[obj]['/Subtype'] == '/Image':
                 # Lesen Sie das neue Bild
@@ -24,7 +24,7 @@ def replace_image_on_page(page, new_image):
                 img_byte_arr = img_byte_arr.getvalue()
 
                 # Ersetzen Sie das alte Bild durch das neue
-                xObject[obj]._data = img_byte_arr
+                xObject[obj].write(img_byte_arr)
                 xObject[obj].update({
                     '/Filter': '/FlateDecode',
                     '/Width': new_image.width,
